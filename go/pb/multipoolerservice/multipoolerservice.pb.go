@@ -1599,15 +1599,15 @@ type StreamPoolerHealthResponse struct {
 	PoolerId *clustermetadata.ID `protobuf:"bytes,2,opt,name=pooler_id,json=poolerId,proto3" json:"pooler_id,omitempty"`
 	// serving_status is the current serving state of the pooler.
 	ServingStatus clustermetadata.PoolerServingStatus `protobuf:"varint,3,opt,name=serving_status,json=servingStatus,proto3,enum=clustermetadata.PoolerServingStatus" json:"serving_status,omitempty"`
-	// primary_observation contains this pooler's view of who the primary is.
-	// Used by clients to identify the true primary when multiple poolers exist.
-	PrimaryObservation *PrimaryObservation `protobuf:"bytes,4,opt,name=primary_observation,json=primaryObservation,proto3" json:"primary_observation,omitempty"`
+	// leader_observation contains this pooler's view of who the consensus leader is.
+	// Used by clients to identify the true leader when multiple poolers exist.
+	LeaderObservation *LeaderObservation `protobuf:"bytes,4,opt,name=leader_observation,json=leaderObservation,proto3" json:"leader_observation,omitempty"`
 	// recommended_staleness_timeout is the duration clients should use
 	// to detect a stale/dead health stream. If no message is received within
 	// this duration, clients should mark the pooler as unhealthy.
 	RecommendedStalenessTimeout *durationpb.Duration `protobuf:"bytes,5,opt,name=recommended_staleness_timeout,json=recommendedStalenessTimeout,proto3" json:"recommended_staleness_timeout,omitempty"`
 	// replication_lag_ns is the current replication lag in nanoseconds,
-	// measured via heartbeat timestamps. Zero on the primary or when unknown.
+	// measured via heartbeat timestamps. Zero on a leader or when unknown.
 	ReplicationLagNs int64 `protobuf:"varint,6,opt,name=replication_lag_ns,json=replicationLagNs,proto3" json:"replication_lag_ns,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
@@ -1664,9 +1664,9 @@ func (x *StreamPoolerHealthResponse) GetServingStatus() clustermetadata.PoolerSe
 	return clustermetadata.PoolerServingStatus(0)
 }
 
-func (x *StreamPoolerHealthResponse) GetPrimaryObservation() *PrimaryObservation {
+func (x *StreamPoolerHealthResponse) GetLeaderObservation() *LeaderObservation {
 	if x != nil {
-		return x.PrimaryObservation
+		return x.LeaderObservation
 	}
 	return nil
 }
@@ -1685,34 +1685,34 @@ func (x *StreamPoolerHealthResponse) GetReplicationLagNs() int64 {
 	return 0
 }
 
-// PrimaryObservation represents a pooler's view of who the primary is.
-type PrimaryObservation struct {
+// LeaderObservation represents a pooler's view of who the consensus leader is.
+type LeaderObservation struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// primary_id is the ID of the pooler this node believes is the primary.
-	// May be this pooler's own ID if it believes itself to be primary.
-	PrimaryId *clustermetadata.ID `protobuf:"bytes,1,opt,name=primary_id,json=primaryId,proto3" json:"primary_id,omitempty"`
-	// primary_term is the primary term at which this observation was made.
-	// The primary never changes within a primary_term. Higher values indicate
-	// more recent primary appointments.
-	PrimaryTerm   int64 `protobuf:"varint,2,opt,name=primary_term,json=primaryTerm,proto3" json:"primary_term,omitempty"`
+	// leader_id is the ID of the pooler this node believes is the consensus leader.
+	// May be this pooler's own ID if it believes itself to be leader.
+	LeaderId *clustermetadata.ID `protobuf:"bytes,1,opt,name=leader_id,json=leaderId,proto3" json:"leader_id,omitempty"`
+	// leader_term is the consensus term at which this observation was made.
+	// The leader never changes within a leader_term. Higher values indicate
+	// more recent leader appointments.
+	LeaderTerm    int64 `protobuf:"varint,2,opt,name=leader_term,json=leaderTerm,proto3" json:"leader_term,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *PrimaryObservation) Reset() {
-	*x = PrimaryObservation{}
+func (x *LeaderObservation) Reset() {
+	*x = LeaderObservation{}
 	mi := &file_multipoolerservice_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *PrimaryObservation) String() string {
+func (x *LeaderObservation) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*PrimaryObservation) ProtoMessage() {}
+func (*LeaderObservation) ProtoMessage() {}
 
-func (x *PrimaryObservation) ProtoReflect() protoreflect.Message {
+func (x *LeaderObservation) ProtoReflect() protoreflect.Message {
 	mi := &file_multipoolerservice_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1724,21 +1724,21 @@ func (x *PrimaryObservation) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PrimaryObservation.ProtoReflect.Descriptor instead.
-func (*PrimaryObservation) Descriptor() ([]byte, []int) {
+// Deprecated: Use LeaderObservation.ProtoReflect.Descriptor instead.
+func (*LeaderObservation) Descriptor() ([]byte, []int) {
 	return file_multipoolerservice_proto_rawDescGZIP(), []int{21}
 }
 
-func (x *PrimaryObservation) GetPrimaryId() *clustermetadata.ID {
+func (x *LeaderObservation) GetLeaderId() *clustermetadata.ID {
 	if x != nil {
-		return x.PrimaryId
+		return x.LeaderId
 	}
 	return nil
 }
 
-func (x *PrimaryObservation) GetPrimaryTerm() int64 {
+func (x *LeaderObservation) GetLeaderTerm() int64 {
 	if x != nil {
-		return x.PrimaryTerm
+		return x.LeaderTerm
 	}
 	return 0
 }
@@ -1944,18 +1944,18 @@ const file_multipoolerservice_proto_rawDesc = "" +
 	"\tcaller_id\x18\x02 \x01(\v2\x0f.mtrpc.CallerIDR\bcallerId\x12/\n" +
 	"\aoptions\x18\x03 \x01(\v2\x15.query.ExecuteOptionsR\aoptions\"#\n" +
 	"!ReleaseReservedConnectionResponse\"\x1b\n" +
-	"\x19StreamPoolerHealthRequest\"\xa8\x03\n" +
+	"\x19StreamPoolerHealthRequest\"\xa5\x03\n" +
 	"\x1aStreamPoolerHealthResponse\x12%\n" +
 	"\x06target\x18\x01 \x01(\v2\r.query.TargetR\x06target\x120\n" +
 	"\tpooler_id\x18\x02 \x01(\v2\x13.clustermetadata.IDR\bpoolerId\x12K\n" +
-	"\x0eserving_status\x18\x03 \x01(\x0e2$.clustermetadata.PoolerServingStatusR\rservingStatus\x12W\n" +
-	"\x13primary_observation\x18\x04 \x01(\v2&.multipoolerservice.PrimaryObservationR\x12primaryObservation\x12]\n" +
+	"\x0eserving_status\x18\x03 \x01(\x0e2$.clustermetadata.PoolerServingStatusR\rservingStatus\x12T\n" +
+	"\x12leader_observation\x18\x04 \x01(\v2%.multipoolerservice.LeaderObservationR\x11leaderObservation\x12]\n" +
 	"\x1drecommended_staleness_timeout\x18\x05 \x01(\v2\x19.google.protobuf.DurationR\x1brecommendedStalenessTimeout\x12,\n" +
-	"\x12replication_lag_ns\x18\x06 \x01(\x03R\x10replicationLagNs\"k\n" +
-	"\x12PrimaryObservation\x122\n" +
-	"\n" +
-	"primary_id\x18\x01 \x01(\v2\x13.clustermetadata.IDR\tprimaryId\x12!\n" +
-	"\fprimary_term\x18\x02 \x01(\x03R\vprimaryTerm\"_\n" +
+	"\x12replication_lag_ns\x18\x06 \x01(\x03R\x10replicationLagNs\"f\n" +
+	"\x11LeaderObservation\x120\n" +
+	"\tleader_id\x18\x01 \x01(\v2\x13.clustermetadata.IDR\bleaderId\x12\x1f\n" +
+	"\vleader_term\x18\x02 \x01(\x03R\n" +
+	"leaderTerm\"_\n" +
 	"\x1aStreamNotificationsRequest\x12%\n" +
 	"\x06target\x18\x01 \x01(\v2\r.query.TargetR\x06target\x12\x1a\n" +
 	"\bchannels\x18\x02 \x03(\tR\bchannels\"X\n" +
@@ -2025,7 +2025,7 @@ var file_multipoolerservice_proto_goTypes = []any{
 	(*ReleaseReservedConnectionResponse)(nil), // 22: multipoolerservice.ReleaseReservedConnectionResponse
 	(*StreamPoolerHealthRequest)(nil),         // 23: multipoolerservice.StreamPoolerHealthRequest
 	(*StreamPoolerHealthResponse)(nil),        // 24: multipoolerservice.StreamPoolerHealthResponse
-	(*PrimaryObservation)(nil),                // 25: multipoolerservice.PrimaryObservation
+	(*LeaderObservation)(nil),                 // 25: multipoolerservice.LeaderObservation
 	(*StreamNotificationsRequest)(nil),        // 26: multipoolerservice.StreamNotificationsRequest
 	(*StreamNotificationsResponse)(nil),       // 27: multipoolerservice.StreamNotificationsResponse
 	(*query.Target)(nil),                      // 28: query.Target
@@ -2094,9 +2094,9 @@ var file_multipoolerservice_proto_depIdxs = []int32{
 	28, // 47: multipoolerservice.StreamPoolerHealthResponse.target:type_name -> query.Target
 	38, // 48: multipoolerservice.StreamPoolerHealthResponse.pooler_id:type_name -> clustermetadata.ID
 	39, // 49: multipoolerservice.StreamPoolerHealthResponse.serving_status:type_name -> clustermetadata.PoolerServingStatus
-	25, // 50: multipoolerservice.StreamPoolerHealthResponse.primary_observation:type_name -> multipoolerservice.PrimaryObservation
+	25, // 50: multipoolerservice.StreamPoolerHealthResponse.leader_observation:type_name -> multipoolerservice.LeaderObservation
 	40, // 51: multipoolerservice.StreamPoolerHealthResponse.recommended_staleness_timeout:type_name -> google.protobuf.Duration
-	38, // 52: multipoolerservice.PrimaryObservation.primary_id:type_name -> clustermetadata.ID
+	38, // 52: multipoolerservice.LeaderObservation.leader_id:type_name -> clustermetadata.ID
 	28, // 53: multipoolerservice.StreamNotificationsRequest.target:type_name -> query.Target
 	41, // 54: multipoolerservice.StreamNotificationsResponse.notification:type_name -> query.PgNotification
 	4,  // 55: multipoolerservice.MultiPoolerService.ExecuteQuery:input_type -> multipoolerservice.ExecuteQueryRequest
