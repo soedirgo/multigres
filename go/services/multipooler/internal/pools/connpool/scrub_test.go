@@ -89,7 +89,7 @@ func TestScrubCleanConnReturnsToPool(t *testing.T) {
 	conn := recycleIdle(t, pool, nil)
 
 	cursor := 0
-	assert.True(t, pool.scrubOne(&cursor))
+	assert.True(t, pool.scrubOne(t.Context(), &cursor))
 
 	assert.EqualValues(t, 1, conn.verifyCalls.Load())
 	assert.EqualValues(t, 1, pool.Metrics.ScrubCheckedCount())
@@ -109,7 +109,7 @@ func TestScrubDivergentConnReplaced(t *testing.T) {
 	conn.div = Divergence{Untracked: []string{"work_mem"}}
 
 	cursor := 0
-	assert.True(t, pool.scrubOne(&cursor))
+	assert.True(t, pool.scrubOne(t.Context(), &cursor))
 
 	assert.True(t, conn.IsClosed(), "divergent backend must be closed")
 	assert.EqualValues(t, 1, pool.Metrics.ScrubDivergentCount())
@@ -132,7 +132,7 @@ func TestScrubDivergentConnInSettingsStack(t *testing.T) {
 	// One scrub pass finds the connection regardless of which settings
 	// bucket it sits in.
 	cursor := 0
-	assert.True(t, pool.scrubOne(&cursor))
+	assert.True(t, pool.scrubOne(t.Context(), &cursor))
 
 	assert.True(t, conn.IsClosed())
 	assert.EqualValues(t, 1, pool.Metrics.ScrubDivergentCount())
@@ -147,7 +147,7 @@ func TestScrubProbeErrorReplacesLiveConn(t *testing.T) {
 	conn.verifyErr = errors.New("probe timeout")
 
 	cursor := 0
-	assert.True(t, pool.scrubOne(&cursor))
+	assert.True(t, pool.scrubOne(t.Context(), &cursor))
 
 	assert.True(t, conn.IsClosed(), "an unverified conn is replaced")
 	assert.EqualValues(t, 1, pool.Metrics.ScrubErrorCount())
@@ -181,7 +181,7 @@ func TestScrubCountsHeldConnAsBorrowed(t *testing.T) {
 	}))
 
 	cursor := 0
-	assert.True(t, pool.scrubOne(&cursor))
+	assert.True(t, pool.scrubOne(t.Context(), &cursor))
 	assert.EqualValues(t, 1, during, "held conn is not available mid-probe")
 	assert.EqualValues(t, 2, pool.Available(), "released after the probe")
 	assert.EqualValues(t, 0, pool.InUse())
@@ -208,7 +208,7 @@ func TestScrubEachCheckerGetsOwnTimeout(t *testing.T) {
 	}))
 
 	cursor := 0
-	assert.True(t, pool.scrubOne(&cursor))
+	assert.True(t, pool.scrubOne(t.Context(), &cursor))
 	assert.Greater(t, remaining, scrubProbeTimeout-slow/2,
 		"second checker's budget was shortened by the first checker's run time")
 	assert.EqualValues(t, 0, pool.Metrics.ScrubErrorCount())
@@ -231,7 +231,7 @@ func TestScrubCloseCancelsInFlightProbe(t *testing.T) {
 	go func() {
 		defer close(done)
 		cursor := 0
-		pool.scrubOne(&cursor)
+		pool.scrubOne(t.Context(), &cursor)
 	}()
 	<-probing
 
@@ -249,7 +249,7 @@ func TestScrubProbeErrorOnDeadConnReplaces(t *testing.T) {
 	conn.closeOnVerify = true
 
 	cursor := 0
-	assert.True(t, pool.scrubOne(&cursor))
+	assert.True(t, pool.scrubOne(t.Context(), &cursor))
 
 	assert.EqualValues(t, 1, pool.Metrics.ScrubErrorCount())
 	assert.EqualValues(t, 1, pool.Active(), "dead conn's slot must be freed and replaced")
@@ -279,7 +279,7 @@ func TestScrubWalksEveryConnInStack(t *testing.T) {
 
 	cursor := 0
 	for range 3 {
-		assert.True(t, pool.scrubOne(&cursor))
+		assert.True(t, pool.scrubOne(t.Context(), &cursor))
 	}
 	for i, p := range pooled {
 		assert.EqualValues(t, 1, p.Conn.verifyCalls.Load(), "conn %d must be probed exactly once per full walk", i)
@@ -287,7 +287,7 @@ func TestScrubWalksEveryConnInStack(t *testing.T) {
 	assert.Equal(t, 3, pool.clean.Len(), "all connections are back in the stack")
 
 	// A fourth tick wraps around to the first connection probed.
-	assert.True(t, pool.scrubOne(&cursor))
+	assert.True(t, pool.scrubOne(t.Context(), &cursor))
 	var total int64
 	for _, p := range pooled {
 		total += p.Conn.verifyCalls.Load()
@@ -317,7 +317,7 @@ func TestScrubPassSpansStacks(t *testing.T) {
 
 	cursor := 0
 	for range 3 {
-		assert.True(t, pool.scrubOne(&cursor))
+		assert.True(t, pool.scrubOne(t.Context(), &cursor))
 	}
 	for name, conn := range map[string]*scrubMockConnection{"clean1": clean1, "clean2": clean2, "labelled": labelled} {
 		assert.EqualValues(t, 1, conn.verifyCalls.Load(), "%s must be probed once per pass", name)
@@ -342,7 +342,7 @@ func TestScrubReopenedConnIsProbedAgainInSamePass(t *testing.T) {
 	other := pb.Conn
 
 	cursor := 0
-	assert.True(t, pool.scrubOne(&cursor))
+	assert.True(t, pool.scrubOne(t.Context(), &cursor))
 	require.EqualValues(t, 1, pa.Conn.verifyCalls.Load(), "first tick probes the top connection")
 	require.EqualValues(t, 0, other.verifyCalls.Load())
 
@@ -355,12 +355,12 @@ func TestScrubReopenedConnIsProbedAgainInSamePass(t *testing.T) {
 	require.NotSame(t, old, again.Conn, "reopen installs a new backend")
 	again.Recycle()
 
-	assert.True(t, pool.scrubOne(&cursor))
+	assert.True(t, pool.scrubOne(t.Context(), &cursor))
 	assert.EqualValues(t, 1, again.Conn.verifyCalls.Load(), "the new backend is probed in the same pass")
 	assert.EqualValues(t, 0, other.verifyCalls.Load(), "the other connection waits its turn")
 	assert.EqualValues(t, 1, old.verifyCalls.Load(), "the old backend is not touched again")
 
-	assert.True(t, pool.scrubOne(&cursor))
+	assert.True(t, pool.scrubOne(t.Context(), &cursor))
 	assert.EqualValues(t, 1, other.verifyCalls.Load(), "then the pass reaches the other connection")
 }
 
@@ -391,7 +391,7 @@ func TestScrubKeepsHotConnClientFacingAndColdConnsExpire(t *testing.T) {
 	// One full pass, with a client checkout after every tick.
 	cursor := 0
 	for tick := range 3 {
-		assert.True(t, pool.scrubOne(&cursor))
+		assert.True(t, pool.scrubOne(t.Context(), &cursor))
 		got, err := pool.Get(context.Background())
 		require.NoError(t, err)
 		assert.Same(t, hot.Conn, got.Conn, "tick %d: a cold connection was promoted into client traffic", tick)
@@ -421,7 +421,7 @@ func TestScrubPreservesIdleClock(t *testing.T) {
 	pool.clean.Push(pooled)
 
 	cursor := 0
-	assert.True(t, pool.scrubOne(&cursor))
+	assert.True(t, pool.scrubOne(t.Context(), &cursor))
 
 	// Scrubbing must not refresh the idle clock, or small pools would never
 	// shrink via idle timeout.
@@ -435,7 +435,7 @@ func TestScrubPreservesIdleClock(t *testing.T) {
 func TestScrubEmptyPoolNoop(t *testing.T) {
 	pool := newScrubTestPool(t, 2, nil)
 	cursor := 0
-	assert.True(t, pool.scrubOne(&cursor))
+	assert.True(t, pool.scrubOne(t.Context(), &cursor))
 	assert.EqualValues(t, 0, pool.Metrics.ScrubCheckedCount())
 }
 
@@ -451,7 +451,7 @@ func TestScrubNoopWithoutCheckers(t *testing.T) {
 	pooled.Recycle()
 
 	cursor := 0
-	assert.True(t, pool.scrubOne(&cursor))
+	assert.True(t, pool.scrubOne(t.Context(), &cursor))
 	assert.EqualValues(t, 0, pool.Metrics.ScrubCheckedCount())
 
 	got, err := pool.Get(context.Background())
@@ -479,7 +479,7 @@ func TestScrubRunsAllRegisteredCheckers(t *testing.T) {
 	conn.div = Divergence{Untracked: []string{"work_mem"}}
 
 	cursor := 0
-	assert.True(t, pool.scrubOne(&cursor))
+	assert.True(t, pool.scrubOne(t.Context(), &cursor))
 
 	assert.EqualValues(t, 1, conn.verifyCalls.Load(), "first checker ran")
 	assert.True(t, conn.IsClosed(), "finding before the error must still replace the backend")

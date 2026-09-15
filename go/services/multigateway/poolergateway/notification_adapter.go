@@ -25,6 +25,7 @@ import (
 
 	"github.com/multigres/multigres/go/common/sqltypes"
 	multipoolerpb "github.com/multigres/multigres/go/pb/multipoolerservice"
+	"github.com/multigres/multigres/go/tools/telemetry"
 )
 
 const notificationAckTimeout = 10 * time.Second
@@ -220,7 +221,9 @@ func (s *notificationSession) startLocked() error {
 	s.stream = stream
 	s.ready = make(chan struct{}, 16)
 	s.errs = make(chan error, 1)
-	go s.recvLoop(ctx, stream, s.ready, s.errs)
+	telemetry.Go(ctx, "poolergateway/notification_recv", func(ctx context.Context) {
+		s.recvLoop(ctx, stream, s.ready, s.errs)
+	})
 
 	if len(s.active) == 0 {
 		return nil

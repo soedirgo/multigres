@@ -24,6 +24,7 @@ import (
 	clustermetadatapb "github.com/multigres/multigres/go/pb/clustermetadata"
 	"github.com/multigres/multigres/go/services/multipooler/internal/poolerserver"
 	"github.com/multigres/multigres/go/services/multipooler/internal/servingstate"
+	"github.com/multigres/multigres/go/tools/telemetry"
 )
 
 const (
@@ -324,34 +325,27 @@ func (pm *MultipoolerManager) shouldPollFailoverSlotReadiness() bool {
 // It broadcasts the current health state at the specified interval.
 // This should be started as a goroutine when the manager opens.
 func (pm *MultipoolerManager) runHealthHeartbeat(ctx context.Context, interval time.Duration) {
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			// Refresh replication lag before broadcasting so clients see
-			// up-to-date lag without requiring a separate state-change event.
-			if pm.healthStreamer != nil {
-				if lag, err := pm.ReplicationLag(ctx); err == nil {
-					pm.healthStreamer.SetReplicationLag(lag.Nanoseconds())
-				}
+	telemetry.RunLoop(ctx, "multipooler/health_heartbeat", interval, func(ctx context.Context) error {
+		// Refresh replication lag before broadcasting so clients see
+		// up-to-date lag without requiring a separate state-change event.
+		if pm.healthStreamer != nil {
+			if lag, err := pm.ReplicationLag(ctx); err == nil {
+				pm.healthStreamer.SetReplicationLag(lag.Nanoseconds())
 			}
-			// Steady-state failover-slot readiness, so it's visible before a
-			// failover is ever needed, not just via the advisory check at
-			// promotion time. Best-effort, like replication lag above. This
-			// backs mg.pooler.logical_failover.slots, unrelated to the health
-			// stream broadcast above.
-			if pm.shouldPollFailoverSlotReadiness() {
-				if ready, total, err := pm.failoverSlotReadiness(ctx); err == nil {
-					pm.metrics.setFailoverSlotReadiness(ready, total)
-				}
-			} else if pm.metrics != nil {
-				pm.metrics.failoverSlotReadinessSnapshot.Store(nil)
-			}
-			pm.broadcastHealth()
 		}
-	}
+		// Steady-state failover-slot readiness, so it's visible before a
+		// failover is ever needed, not just via the advisory check at
+		// promotion time. Best-effort, like replication lag above. This
+		// backs mg.pooler.logical_failover.slots, unrelated to the health
+		// stream broadcast above.
+		if pm.shouldPollFailoverSlotReadiness() {
+			if ready, total, err := pm.failoverSlotReadiness(ctx); err == nil {
+				pm.metrics.setFailoverSlotReadiness(ready, total)
+			}
+		} else if pm.metrics != nil {
+			pm.metrics.failoverSlotReadinessSnapshot.Store(nil)
+		}
+		pm.broadcastHealth()
+		return nil
+	})
 }

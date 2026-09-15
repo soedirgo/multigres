@@ -56,8 +56,7 @@ func translatePreExecutionUnavailable(err error) error {
 	if !mterrors.IsPreExecutionUnavailable(err) {
 		return err
 	}
-	var diagnostic *mterrors.PgDiagnostic
-	if errors.As(err, &diagnostic) {
+	if diagnostic, ok := errors.AsType[*mterrors.PgDiagnostic](err); ok {
 		return mterrors.WithCode(diagnostic, mtrpcpb.Code_UNAVAILABLE)
 	}
 	return err

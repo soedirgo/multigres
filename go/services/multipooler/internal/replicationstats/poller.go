@@ -27,6 +27,7 @@ import (
 	"github.com/multigres/multigres/go/services/multipooler/internal/executor"
 	"github.com/multigres/multigres/go/services/multipooler/internal/switcher"
 	"github.com/multigres/multigres/go/tools/pgutil"
+	"github.com/multigres/multigres/go/tools/telemetry"
 	"github.com/multigres/multigres/go/tools/timer"
 )
 
@@ -109,7 +110,13 @@ var _ switcher.Toggleable = (*Poller)(nil)
 // Open starts the poller's ticker.
 func (p *Poller) Open() {
 	p.logger.Info("replicationstats Poller: opening")
-	p.runner.Start(p.poll, nil)
+	// Wrap each tick in a span so poll logs carry trace_id/span_id.
+	p.runner.Start(func(ctx context.Context) {
+		_ = telemetry.WithSpan(ctx, "replicationstats/poll", func(ctx context.Context) error {
+			p.poll(ctx)
+			return nil
+		})
+	}, nil)
 }
 
 // Close stops the poller's ticker. After Close returns, no more polls will

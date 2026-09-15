@@ -127,7 +127,10 @@ func (pool *Pool[C]) scrubNext(cursor *int) (scrubbed[C], bool) {
 // clock intact; a divergent one, or one whose state could not be verified,
 // is closed and replaced. The bool return keeps the runWorker signature; it
 // is always true.
-func (pool *Pool[C]) scrubOne(cursor *int) bool {
+//
+// ctx carries the per-tick tracing span; probe contexts still derive from
+// pool.scrubCtx so pool close cancels any in-flight probe promptly.
+func (pool *Pool[C]) scrubOne(ctx context.Context, cursor *int) bool {
 	if pool.Capacity() == 0 || len(pool.checkers) == 0 {
 		return true
 	}
@@ -153,8 +156,8 @@ func (pool *Pool[C]) scrubOne(cursor *int) bool {
 	var checkErr error
 	var errChecker string
 	for _, checker := range pool.checkers {
-		ctx, cancel := context.WithTimeout(pool.scrubCtx, scrubProbeTimeout)
-		div, err := checker.Check(ctx, conn.Conn)
+		probeCtx, cancel := context.WithTimeout(pool.scrubCtx, scrubProbeTimeout)
+		div, err := checker.Check(probeCtx, conn.Conn)
 		cancel()
 		if err != nil {
 			checkErr, errChecker = err, checker.Name()
@@ -185,7 +188,7 @@ func (pool *Pool[C]) scrubOne(cursor *int) bool {
 		// Divergence carries names only, never values.
 		for _, f := range findings {
 			pool.scrubMetrics.RecordDivergence(pool.ctx, pool.poolType, f.checker, f.div)
-			pool.logger.Warn("session-state divergence detected; replacing backend",
+			pool.logger.WarnContext(ctx, "session-state divergence detected; replacing backend",
 				"pool", pool.Name,
 				"checker", f.checker,
 				"untracked", f.div.Untracked,
@@ -203,7 +206,7 @@ func (pool *Pool[C]) scrubOne(cursor *int) bool {
 		// closed and replace it. Churn is bounded to one connection per
 		// scrub tick.
 		if checkErr != nil {
-			pool.logger.Warn("connection state check failed; replacing backend",
+			pool.logger.WarnContext(ctx, "connection state check failed; replacing backend",
 				"pool", pool.Name, "checker", errChecker, "error", checkErr)
 		}
 		if !conn.Conn.IsClosed() {

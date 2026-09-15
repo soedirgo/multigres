@@ -29,6 +29,7 @@ import (
 	"github.com/multigres/multigres/go/common/topoclient"
 	multigatewayservicepb "github.com/multigres/multigres/go/pb/multigatewayservice"
 	"github.com/multigres/multigres/go/tools/grpccommon"
+	"github.com/multigres/multigres/go/tools/telemetry"
 )
 
 const (
@@ -249,17 +250,10 @@ func (cm *CancelManager) rebuildPrefixCache(ctx context.Context) {
 // refreshPrefixCachePeriodically rebuilds the prefix cache on a regular interval
 // so that gateway additions/removals are picked up even without a cache miss.
 func (cm *CancelManager) refreshPrefixCachePeriodically(ctx context.Context) {
-	ticker := time.NewTicker(prefixCacheRefreshInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			cm.rebuildPrefixCache(ctx)
-		}
-	}
+	telemetry.RunLoop(ctx, "multigateway/prefix_cache_refresh", prefixCacheRefreshInterval, func(ctx context.Context) error {
+		cm.rebuildPrefixCache(ctx)
+		return nil
+	})
 }
 
 // getClient returns a cached gRPC client for the given address, creating one if needed.

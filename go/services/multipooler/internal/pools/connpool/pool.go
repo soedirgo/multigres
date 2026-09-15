@@ -27,6 +27,7 @@ import (
 
 	"github.com/multigres/multigres/go/common/mterrors"
 	"github.com/multigres/multigres/go/services/multipooler/internal/connstate"
+	"github.com/multigres/multigres/go/tools/telemetry"
 )
 
 var (
@@ -343,7 +344,12 @@ func (pool *Pool[C]) open() {
 		// state, replacing connections that diverged. See scrub.go.
 		var cursor int
 		pool.runWorker(closeChan, scrubInterval, func(_ time.Time) bool {
-			return pool.scrubOne(&cursor)
+			var keepRunning bool
+			_ = telemetry.WithSpan(pool.ctx, "connpool/scrub", func(ctx context.Context) error {
+				keepRunning = pool.scrubOne(ctx, &cursor)
+				return nil
+			})
+			return keepRunning
 		})
 	}
 
@@ -352,15 +358,21 @@ func (pool *Pool[C]) open() {
 		// The refresh worker periodically checks the refresh callback in this pool
 		// to decide whether all the connections in the pool need to be cycled
 		pool.runWorker(closeChan, refreshInterval, func(_ time.Time) bool {
-			refresh, err := pool.config.refresh()
-			if err != nil {
-				pool.logger.Error("pool refresh check failed", "pool", pool.Name, "error", err)
-			}
-			if refresh {
-				go pool.reopen()
-				return false
-			}
-			return true
+			var keepRunning bool
+			_ = telemetry.WithSpan(pool.ctx, "connpool/refresh", func(ctx context.Context) error {
+				refresh, err := pool.config.refresh()
+				if err != nil {
+					pool.logger.ErrorContext(ctx, "pool refresh check failed", "pool", pool.Name, "error", err)
+				}
+				if refresh {
+					go pool.reopen()
+					keepRunning = false
+					return nil
+				}
+				keepRunning = true
+				return nil
+			})
+			return keepRunning
 		})
 	}
 }

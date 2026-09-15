@@ -18,6 +18,8 @@ import (
 	"context"
 	"maps"
 	"time"
+
+	"github.com/multigres/multigres/go/tools/telemetry"
 )
 
 // startRebalancer starts the background rebalancer goroutine.
@@ -36,17 +38,10 @@ func (m *Manager) rebalanceLoop() {
 	defer m.rebalancerWg.Done()
 
 	interval := m.config.RebalanceInterval()
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-m.rebalancerCtx.Done():
-			return
-		case <-ticker.C:
-			m.rebalance(m.rebalancerCtx)
-		}
-	}
+	telemetry.RunLoop(m.rebalancerCtx, "connpoolmanager/rebalance", interval, func(ctx context.Context) error {
+		m.rebalance(ctx)
+		return nil
+	})
 }
 
 // rebalance performs one rebalance cycle:

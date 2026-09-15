@@ -23,6 +23,7 @@ import (
 	"github.com/multigres/multigres/go/common/constants"
 	multipoolermanagerdata "github.com/multigres/multigres/go/pb/multipoolermanagerdata"
 	"github.com/multigres/multigres/go/services/multipooler/internal/pgmode"
+	"github.com/multigres/multigres/go/tools/telemetry"
 )
 
 // Bounded readiness reasons reported by the readiness gauge and status page.
@@ -225,16 +226,10 @@ func (e *Engine) RunHealthPoller(ctx context.Context, interval time.Duration) {
 	}
 	e.refreshHealth(ctx)
 
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			e.refreshHealth(ctx)
-		}
-	}
+	telemetry.RunLoop(ctx, "backup/health_poller", interval, func(ctx context.Context) error {
+		e.refreshHealth(ctx)
+		return nil
+	})
 }
 
 // RefreshHealthNow performs a full one-off backup-health refresh, including the
