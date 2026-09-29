@@ -38,6 +38,8 @@ RUN apk add --no-cache \
 COPY --from=pgbackrest-builder /src/build/src/pgbackrest /usr/local/bin/pgbackrest
 RUN pgbackrest version
 
+RUN mkdir -p /var/log/postgresql && chown postgres:postgres /var/log/postgresql
+
 COPY --from=pgctld-builder /src/bin/pgctld /usr/local/bin/pgctld-bin
 COPY --chmod=0755 supabase/pgctld-wrapper.sh /usr/local/bin/pgctld
 COPY supabase/postgresql.conf.tmpl /etc/pgctld-custom/postgresql.conf.tmpl
