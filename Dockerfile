@@ -6,6 +6,7 @@
 # exact version read from go.mod, so go.mod is the single source of truth (see
 # .github/actions/go-version). Keep the default's minor in sync with go.mod.
 ARG GO_VERSION=1.26
+ARG PGBACKREST_VERSION=2.59.1
 FROM golang:${GO_VERSION}-alpine AS builder
 
 ARG GIT_COMMIT=unknown
@@ -41,6 +42,8 @@ LABEL org.opencontainers.image.licenses="Apache-2.0"
 # Set pipefail to catch errors in piped commands
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
+ARG PGBACKREST_VERSION
+
 # Install pgBackRest from PostgreSQL APT repository and procps
 # hadolint ignore=DL3008
 RUN apt-get update && \
@@ -53,8 +56,10 @@ RUN apt-get update && \
     echo "deb [signed-by=/usr/share/keyrings/postgresql-archive-keyring.gpg] http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list && \
     apt-get update && \
     apt-cache policy pgbackrest && \
+    pgbackrest_full=$(apt-cache madison pgbackrest | awk -v v="${PGBACKREST_VERSION}" '$3 ~ "^"v"-" && /pgdg/ {print $3; exit}') && \
+    [ -n "$pgbackrest_full" ] || { echo "no pgdg pgbackrest ${PGBACKREST_VERSION} in apt"; exit 1; } && \
     apt-get install -y --no-install-recommends \
-    pgbackrest \
+    "pgbackrest=$pgbackrest_full" \
     procps && \
     pgbackrest version && \
     apt-get remove -y ca-certificates curl gnupg lsb-release && \
