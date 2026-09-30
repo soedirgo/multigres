@@ -281,6 +281,10 @@ restart_after_crash = off		# reinitialize after backend crash?
 # supautils specific configurations
 include = '/etc/postgresql-custom/supautils.conf'
 
+# jsonlog + /var/log/postgresql/postgresql.json — bridged to container stdout
+# by /usr/local/bin/pgctld (see supabase/pgctld-wrapper.sh)
+include_if_exists = '/etc/postgresql/logging.conf'
+
 #------------------------------------------------------------------------------
 # CUSTOMIZED OPTIONS
 #------------------------------------------------------------------------------

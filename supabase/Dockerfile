@@ -43,6 +43,7 @@ RUN mkdir -p /var/log/postgresql && chown postgres:postgres /var/log/postgresql
 COPY --from=pgctld-builder /src/bin/pgctld /usr/local/bin/pgctld-bin
 COPY --chmod=0755 supabase/pgctld-wrapper.sh /usr/local/bin/pgctld
 COPY supabase/postgresql.conf.tmpl /etc/pgctld-custom/postgresql.conf.tmpl
+COPY --chown=postgres:postgres supabase/postgresql-jsonlog.conf /etc/postgresql/logging.conf
 
 RUN sed -i \
         -e "s|^include = '/etc/postgresql-custom/wal-g.conf'|#include = '/etc/postgresql-custom/wal-g.conf'|" \
